@@ -91,14 +91,19 @@ export default function Tool() {
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
-    let tz = "UTC";
-    try {
-      tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-    } catch {
-      // keep UTC
-    }
-    setTimezone(tz);
-    setNow(new Date());
+    // Deferred (async) so this runs after hydration commits, avoiding both the
+    // set-state-in-effect lint rule and the time-based hydration mismatch.
+    const id = setTimeout(() => {
+      let tz = "UTC";
+      try {
+        tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      } catch {
+        // keep UTC
+      }
+      setTimezone(tz);
+      setNow(new Date());
+    }, 0);
+    return () => clearTimeout(id);
   }, []);
 
   const timezones = useMemo(() => getTimezones(), []);
