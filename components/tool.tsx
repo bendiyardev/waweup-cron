@@ -85,19 +85,20 @@ export default function Tool() {
   const [explainInput, setExplainInput] = useState("30 9 * * MON-FRI");
   const [timezone, setTimezone] = useState("UTC");
   const [copied, setCopied] = useState(false);
+  // `nextRuns` depends on the current time, which differs between the SSR
+  // render and client hydration — computing it during render causes a
+  // hydration mismatch (React #418). Defer it until after mount.
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
-    // Deferred so hydration finishes with the SSR default before the local
-    // timezone is applied.
-    const id = setTimeout(() => {
-      try {
-        const local = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        if (local) setTimezone(local);
-      } catch {
-        // keep UTC
-      }
-    }, 0);
-    return () => clearTimeout(id);
+    let tz = "UTC";
+    try {
+      tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch {
+      // keep UTC
+    }
+    setTimezone(tz);
+    setNow(new Date());
   }, []);
 
   const timezones = useMemo(() => getTimezones(), []);
@@ -111,7 +112,8 @@ export default function Tool() {
     if (expression.length === 0) return null;
     try {
       const description = describeCron(expression, lang);
-      const runs = nextRuns(expression, 8, new Date(), timezone);
+      // Only compute time-dependent runs after mount (now !== null).
+      const runs = now ? nextRuns(expression, 8, now, timezone) : [];
       return { description, runs, error: null as string | null };
     } catch (err) {
       const detail =
@@ -120,7 +122,7 @@ export default function Tool() {
           : "syntax error";
       return { description: "", runs: [] as Date[], error: detail };
     }
-  }, [expression, lang, timezone]);
+  }, [expression, lang, timezone, now]);
 
   const handleCopy = useCallback(async () => {
     try {
